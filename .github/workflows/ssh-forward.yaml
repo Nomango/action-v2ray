@@ -1,21 +1,13 @@
 name: SSH Forward Port To Public Server
 on:
   workflow_dispatch:
-#  schedule:
-#    - cron: '*/30 * * * *'
+  schedule:
+    - cron: '*/30 * * * *'
 
 jobs:
   env:
     runs-on: ubuntu-latest
     steps:
-      - name: Set ENV
-        run: |
-          sudo apt update
-          sudo apt -y install sshpass
-          sudo passwd runner << EOD
-          root
-          root
-          EOD
       - name: Set v2ray
         run: |
           mkdir v2ray
@@ -37,7 +29,7 @@ jobs:
                 "settings": {
                   "clients": [
                     {
-                      "id": "26e3a620-e33e-45e6-b316-4570b0ecf39c",
+                      "id": "a6f92ac7-5846-4c2b-a704-cbaec206f1e9",
                       "level": 1,
                       "alterId": 0,
                       "email": "client@example.com"
@@ -123,6 +115,7 @@ jobs:
           EOD
           nohup ./v2ray run > v2ray.log &
           cd ~
+
       - name: Run Caddy
         run: |
           sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
@@ -149,27 +142,39 @@ jobs:
           sudo chown root:root /etc/caddy/Caddyfile
           cat /etc/caddy/Caddyfile
           sudo systemctl restart caddy
-      - name: Prepare SH
+
+      - name: Wait
         run: |
-          echo "#!/bin/bash" >> ready.sh
-          echo "echo \"http://$SERVER_IP:$SERVER_PORT\"" >> ready.sh
-          echo "CODE=\`curl -I -m 10 -o /dev/null -s -w '%{http_code}\\n' \"http://$SERVER_IP:$SERVER_PORT\"\`" >> ready.sh
-          echo "echo \"CODE: \$CODE\"" >> ready.sh
-          echo "while [[ \"123\$CODE\" -eq \"123404\" ]]; do" >> ready.sh
-          echo "CODE=\`curl -I -m 10 -o /dev/null -s -w '%{http_code}\\n' \"http://$SERVER_IP:$SERVER_PORT\"\`" >> ready.sh
-          echo "echo \"CODE: \$CODE\"" >> ready.sh
-          echo "sleep 5" >> ready.sh
-          echo "done"  >> ready.sh
-          echo "echo \"ok\"" >> ready.sh
+          cat << EOF > ready.sh       
+            #!/bin/bash
+            CODE=\`curl -I -m 10 -o /dev/null -s -w '%{http_code}\\n' "http://$SERVER_IP:$SERVER_PORT"\`
+            echo "CODE: \$CODE"
+            while [[ "123\$CODE" -eq "123404" ]]; do
+              CODE=\`curl -I -m 10 -o /dev/null -s -w '%{http_code}\\n' "http://$SERVER_IP:$SERVER_PORT"\`
+              echo "CODE: \$CODE"
+              sleep 5
+            done
+            echo ok
+          EOF
           chmod +x ./ready.sh
+          bash ./ready.sh
         env:
           SERVER_IP: ${{ secrets.SERVER_IP }}
           SERVER_PORT: ${{ secrets.SERVER_REMOTE_PORT }}
-      - name: wait
-        run: |
-          cat ./ready.sh
-          bash ./ready.sh
+
       - name: Connect Server
         run: |
-          sshpass -p ${{ secrets.SERVER_SSH_PASSWORD }} ssh -o "StrictHostKeyChecking no" -f -NT -p ${{ secrets.SERVER_SSH_PORT }} -R :${{ secrets.SERVER_REMOTE_PORT }}:localhost:${{ secrets.SERVER_REMOTE_PORT }} ${{ secrets.SERVER_SSH_USER }}@${{ secrets.SERVER_IP }}
-          sleep 1860
+          mkdir -p /home/runner/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > /home/runner/.ssh/github_actions
+          chmod 600 /home/runner/.ssh/github_actions
+          ssh -i /home/runner/.ssh/github_actions -f \
+            -o ServerAliveCountMax=5 -o ServerAliveInterval=60 -o StrictHostKeyChecking=no \
+            -NT -R :${{ secrets.SERVER_REMOTE_PORT }}:localhost:${{ secrets.SERVER_REMOTE_PORT }} \
+            -p ${{ secrets.SERVER_SSH_PORT }} ${{ secrets.SERVER_SSH_USER }}@${{ secrets.SERVER_IP }}
+          sleep 31m
+
+      #- name: Setup tmate session
+      #  uses: mxschmitt/action-tmate@v3
+      #  with:
+      #    detached: true
+      #    limit-access-to-actor: false
