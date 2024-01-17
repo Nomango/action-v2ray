@@ -1,8 +1,8 @@
 name: SSH Forward Port To Public Server
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '5,25,45 * * * *'
+  #schedule:
+  #  - cron: '*/30 * * * *'
 
 jobs:
   env:
@@ -171,7 +171,21 @@ jobs:
             -o ServerAliveCountMax=5 -o ServerAliveInterval=60 -o StrictHostKeyChecking=no \
             -NT -R :${{ secrets.SERVER_REMOTE_PORT }}:localhost:${{ secrets.SERVER_REMOTE_PORT }} \
             -p ${{ secrets.SERVER_SSH_PORT }} ${{ secrets.SERVER_SSH_USER }}@${{ secrets.SERVER_IP }}
-          sleep 25m
+          sleep 2m
+
+      - name: Start Next
+        uses: actions/github-script@v6
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: '${{ github.repository_owner }}',
+              repo: '${{ github.event.repository.name }}',
+              workflow_id: 'ssh-forward.yaml',
+              ref: 'main'
+            })
+
+      - name: Wait
+        run: sleep 2m
 
       #- name: Setup tmate session
       #  uses: mxschmitt/action-tmate@v3
