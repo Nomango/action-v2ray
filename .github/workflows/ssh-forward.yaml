@@ -177,6 +177,7 @@ jobs:
 
       - name: Start Next
         uses: actions/github-script@v6
+        if: ${{ !cancelled() }}
         with:
           script: |
             await github.rest.actions.createWorkflowDispatch({
@@ -188,6 +189,15 @@ jobs:
 
       - name: Wait
         run: sleep 2m
+
+      - name: Clean workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        if: ${{ !cancelled() }}
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 2
 
       #- name: Setup tmate session
       #  uses: mxschmitt/action-tmate@v3
